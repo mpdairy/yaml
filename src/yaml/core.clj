@@ -12,9 +12,20 @@
      :whitespace (count (re-find #"\s*-?\s*" line))}))
 
 (defn extract-vars [text]
-  (->> (clojure.string/split text #"\n")
-       (map get-var)
-       (remove nil?)))
+  (loop [lines   (clojure.string/split text #"\n")
+         pretext ""
+         varlist []]
+    (if (empty? lines)
+      varlist
+      (if-let [var (get-var (first lines))]
+        (recur (rest lines)
+               ""
+               (concat
+                varlist
+                [(assoc var :pretext (when (not= pretext "") pretext))]))
+        (recur (rest lines)
+               (str pretext (first lines) "\n")
+               varlist)) )))
 
 (defn after-nth [ls n]
   (if (= n 0) ls (recur (rest ls) (dec n))))
@@ -46,6 +57,7 @@
 
 (defn print-var [var]
   (str
+   (when-not (:deprecated var) (:pretext var))
    (reduce str (take (- (:whitespace var) (if (:dashed var) 2 0)) (repeat " ")))
    (when (or (:deprecated var) (:commented var)) "# ")
    (when (:dashed var) "- ")
@@ -64,8 +76,13 @@
 
 (defn combine-vars [oldvar newvar]
   (if oldvar
-    (assoc oldvar
-      :nested (seq (combine-varlists (:nested oldvar) (:nested newvar))))
+    (assoc newvar
+        :attrib    (:attrib newvar)
+        :val       (:val oldvar)
+        :commented (:commented oldvar)
+        :dashed    (:dashed oldvar)
+        :pretext   (:pretext newvar)
+        :nested    (seq (combine-varlists (:nested oldvar) (:nested newvar))))
     newvar))
 
 (defn flag-as-deprecated [varlist]
@@ -103,6 +120,7 @@
 
 (comment
   (print-combined-yaml "resources/cassandra-1.2.yaml" "resources/cassandra-2.0.yaml")
+
   )
 
 (defn -main
